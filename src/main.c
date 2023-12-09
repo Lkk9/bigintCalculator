@@ -1,5 +1,6 @@
 #include "bigint.h"
 #include "notation.h"
+#include "returncode.h"
 #include "stack.h"
 #include <stdio.h>
 #include <string.h>
@@ -7,7 +8,7 @@
 int main(int argc, char **argv) {
     if (argc != 2) {
         fprintf(stderr, "Requires one argument, instead got %d\n", argc - 1);
-        return 1;
+        return RC_INV_ARG;
     }
 
     notation_t notation;
@@ -17,15 +18,15 @@ int main(int argc, char **argv) {
         notation = INFIX;
     } else {
         fprintf(stderr, "Invalid argument name \"%s\"\n", argv[1]);
-        return 1;
+        return RC_INV_ARG;
     }
     ll_mexp_t *stack = NULL;
     bi_t *a, *b;
-    bi_from_str(a, "-0234");
-    bi_from_str(b, "1208378012789479827349827349729487");
+    // bi_from_str(a, "-0234");
+    bi_from_str(b, "82375789324");
     if (ll_mexp_push(stack, 23) == NULL) {
-        return 5;
+        return RC_MEM_ERR;
     }
 
-    return 0;
+    return RC_OK;
 }

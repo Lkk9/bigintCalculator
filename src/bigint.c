@@ -1,43 +1,49 @@
 #include "bigint.h"
 #include "returncode.h"
 #include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-int ll_sd_push(ll_sd_t **head, sd_t *sd) {
-    ll_sd_t *new_node = malloc(sizeof(ll_sd_t));
-    if (new_node == NULL) {
+void ll_bi_free(ll_bi_t **head) {
+    ll_bi_t *current = *head;
+    ll_bi_t *previos = current;
+    while (current != NULL) {
+        previos = current;
+        current = current->next_digit;
+        free(previos);
+    }
+}
+
+int ll_bi_push(ll_bi_t **head, digit_base_t digit) {
+    ll_bi_t *ll_bi_new_digit = (ll_bi_t *)malloc(sizeof(ll_bi_t));
+    if (ll_bi_new_digit == NULL) {
         return RC_MEM_ERR;
     }
-    new_node->digit = sd;
-    new_node->next = *head;
-    *head = new_node;
+    ll_bi_new_digit->next_digit = *head;
+    ll_bi_new_digit->digit = digit;
+    *head = ll_bi_new_digit;
     return 0;
 }
 
-int sd_get_from_char(sd_t *sd, char digit, number_size index) {
-    sd->data = ((digit / 2) << 1) | (digit % 2);
-    sd->index = index;
-    return 0;
-}
-
-int bi_str_to_ll_sd(ll_sd_t *head, char *str) {
-    if (head != NULL) {
-        return -1;
+void ll_bi_show(bi_t *bi) {
+    if (bi->is_negative) {
+        printf("-");
     }
 
-    for (number_size i = 0; i < strlen(str); i++) {
-        char cur_digit = str[i];
-        sd_t *cur_sd = (sd_t *)malloc(sizeof(sd_t));
-        if (cur_sd == NULL) {
-            return RC_MEM_ERR;
+    ll_bi_t *current = bi->first_digit;
+    while (current != NULL) {
+        for (digit_base_t i = 0; i < DIGIT_BASE_SIZE; i++) {
+            if (!(current->digit & (((digit_base_t)1 << (DIGIT_BASE_SIZE - 1)) >> i))) {
+                printf("0");
+            } else
+                printf("1");
         }
-        sd_get_from_char(cur_sd, cur_digit - '0', i);
-        ll_sd_push(&head, cur_sd);
+        printf(" ");
+        current = current->next_digit;
     }
-
-    return 0;
+    printf("\n");
 }
 
 int bi_from_str(bi_t *bi, char *str) {
@@ -46,24 +52,20 @@ int bi_from_str(bi_t *bi, char *str) {
         str++;
 
     // remove leading zeros
-    while (*str == '0' && *str != '\0')
+    while (*str == '0' && *(str + 1) != '\0')
         str++;
 
     if (*str == '\0') {
-        // got only minus :skull:
         return 6;
     }
-    printf("her1e\n");
 
     // error if weird symbols
     for (int i = strlen(str) - 1; i >= 0; i--) {
-        printf("%d:%c ", i, str[i]);
         if (str[i] < '0' || str[i] > '9') {
-            printf("wrong: %d\n", str[i]);
+            printf("wrong, END: %d\n", str[i]);
             return RC_INV_INPUT;
         }
     }
-    printf("\nher2e\n");
 
     bi = (bi_t *)malloc(sizeof(bi_t));
     if (bi == NULL) {
@@ -71,9 +73,46 @@ int bi_from_str(bi_t *bi, char *str) {
     }
     bi->is_negative = is_negative;
     bi->first_digit = NULL;
-    printf("healjksdjkasdre\n");
 
-    bi_str_sds(bi, "98247349982743984729874827348729834");
-    free(bi);
+    size_t str_len = strlen(str);
+    char quotient[str_len];
+    for (size_t i = 0; i < str_len; i++) {
+        quotient[i] = str[i] - '0';
+    }
+
+    uint8_t is_zero = 1;
+    digit_base_t bits_count = 0;
+    digit_base_t bits = 0;
+    do {
+        is_zero = 1;
+        digit_base_t carry = 0;
+        for (size_t i = 0; i < str_len; i++) {
+            uint8_t cur_digit = quotient[i] + 10 * carry;
+            quotient[i] = cur_digit / 2;
+            carry = cur_digit % 2;
+            if (quotient[i] != 0)
+                is_zero = 0;
+        }
+        bits = bits | (carry << (bits_count));
+        bits_count++;
+        if (bits_count == DIGIT_BASE_SIZE) {
+            bits_count = 0;
+            if (ll_bi_push(&(bi->first_digit), bits) == RC_MEM_ERR) {
+                ll_bi_free(&(bi->first_digit));
+                free(bi);
+                return RC_MEM_ERR;
+            }
+            bits = 0;
+        } else if (is_zero) {
+            if (ll_bi_push(&(bi->first_digit), bits) == RC_MEM_ERR) {
+                ll_bi_free(&(bi->first_digit));
+                free(bi);
+                return RC_MEM_ERR;
+            }
+        }
+    } while (!is_zero);
+
+    printf("calculation done!, result: \n");
+    ll_bi_show(bi);
     return 0;
 }
