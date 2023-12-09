@@ -6,24 +6,31 @@
 #include <stdlib.h>
 #include <string.h>
 
-void ll_bi_free(ll_bi_t **head) {
-    ll_bi_t *current = *head;
+// int bi_compare(bi_t *bi1, bi_t *bi2) {}
+
+// int bi_add(bi_t *result, bi_t *addend1, bi_t *addend2) { int compare = bi_compare(addend1, addend2); }
+
+void bi_free(bi_t **bi) {
+    ll_bi_t *current = (*bi)->first_digit;
     ll_bi_t *previos = current;
     while (current != NULL) {
         previos = current;
         current = current->next_digit;
         free(previos);
     }
+    free(*bi);
+    *bi = NULL;
 }
 
-int ll_bi_push(ll_bi_t **head, digit_base_t digit) {
+int ll_bi_push(bi_t *bi, digit_base_t digit) {
     ll_bi_t *ll_bi_new_digit = (ll_bi_t *)malloc(sizeof(ll_bi_t));
     if (ll_bi_new_digit == NULL) {
         return RC_MEM_ERR;
     }
-    ll_bi_new_digit->next_digit = *head;
+    ll_bi_new_digit->next_digit = bi->first_digit;
     ll_bi_new_digit->digit = digit;
-    *head = ll_bi_new_digit;
+    bi->first_digit = ll_bi_new_digit;
+    bi->total_digits++;
     return 0;
 }
 
@@ -43,7 +50,7 @@ void ll_bi_show(bi_t *bi) {
         printf(" ");
         current = current->next_digit;
     }
-    printf("\n");
+    printf("\n(%llu) digits\n", bi->total_digits);
 }
 
 int bi_from_str(bi_t *bi, char *str) {
@@ -97,16 +104,14 @@ int bi_from_str(bi_t *bi, char *str) {
         bits_count++;
         if (bits_count == DIGIT_BASE_SIZE) {
             bits_count = 0;
-            if (ll_bi_push(&(bi->first_digit), bits) == RC_MEM_ERR) {
-                ll_bi_free(&(bi->first_digit));
-                free(bi);
+            if (ll_bi_push(bi, bits) == RC_MEM_ERR) {
+                bi_free(&bi);
                 return RC_MEM_ERR;
             }
             bits = 0;
         } else if (is_zero) {
-            if (ll_bi_push(&(bi->first_digit), bits) == RC_MEM_ERR) {
-                ll_bi_free(&(bi->first_digit));
-                free(bi);
+            if (ll_bi_push(bi, bits) == RC_MEM_ERR) {
+                bi_free(&bi);
                 return RC_MEM_ERR;
             }
         }

@@ -21,9 +21,10 @@ int main(int argc, char **argv) {
         return RC_INV_ARG;
     }
     ll_mexp_t *stack = NULL;
-    bi_t *a, *b;
-    // bi_from_str(a, "-0234");
+    bi_t *a, *b, *c;
+    bi_from_str(a, "-0238");
     bi_from_str(b, "82375789324");
+    // bi_add(c, a, b);
     if (ll_mexp_push(stack, 23) == NULL) {
         return RC_MEM_ERR;
     }

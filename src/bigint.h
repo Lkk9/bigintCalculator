@@ -3,7 +3,7 @@
 #ifndef BIGINT_H
 #define BIGINT_H
 
-typedef uint8_t digit_base_t;
+typedef uint16_t digit_base_t;
 
 #define DIGIT_BASE_SIZE (sizeof(digit_base_t) * 8)
 
@@ -14,6 +14,7 @@ typedef struct ll_bi_s {
 
 typedef struct bi_s {
     ll_bi_t *first_digit;
+    uint64_t total_digits;
     uint8_t is_negative;
 } bi_t;
 
