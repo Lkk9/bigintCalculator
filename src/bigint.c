@@ -23,7 +23,7 @@ void ll_bi_show(bi_t *bi) {
         printf(" ");
         current = current->next_digit;
     }
-    printf("\n(%llu) digits\n", bi->total_digits);
+    printf("\n");
 }
 
 int bi_compare(bi_t *bi1, bi_t *bi2) {
@@ -44,30 +44,95 @@ int bi_compare(bi_t *bi1, bi_t *bi2) {
     return 0;
 }
 
-int bi_add(bi_t *result, bi_t *addend1, bi_t *addend2) {
-    int compare = bi_compare(addend1, addend2);
-    ll_bi_show(addend1);
-    ll_bi_show(addend2);
-    if (compare == 1) {
-        bi_t *tmp = addend2;
-        addend2 = addend1;
-        addend1 = tmp;
-    }
-    ll_bi_show(addend1);
-    ll_bi_show(addend2);
-    return 0;
+void bi_swap(bi_t **bi1_p, bi_t **bi2_p) {
+    bi_t *tmp = *bi2_p;
+    *bi2_p = *bi1_p;
+    *bi1_p = tmp;
 }
 
-void bi_free(bi_t **bi) {
-    ll_bi_t *current = (*bi)->first_digit;
+int bi_add(bi_t *result, bi_t *addend1, bi_t *addend2) {
+    int compare = bi_compare(addend1, addend2);
+
+    if (compare == 1) {
+        bi_swap(&addend1, &addend2);
+    }
+    digit_base_t cur_sum = 0;
+    unsigned carry = 0;
+    unsigned is_exceeded = 0;
+    unsigned bits_to_count = sizeof(digit_base_t) * 8;
+    ll_bi_t *cur_bi1_digit = addend1->last_digit;
+    ll_bi_t *cur_bi2_digit = addend2->last_digit;
+    for (uint64_t i = 0; i < addend2->total_digits; i++) {
+
+        for (unsigned j = 0; j < bits_to_count; j++) {
+            unsigned bit_sum = 0;
+            unsigned bit_bi1 = is_exceeded ? 0 : (cur_bi1_digit->digit & (1 << j));
+            unsigned bit_bi2 = (cur_bi2_digit->digit & (1 << j));
+
+            if (bit_bi1 ^ bit_bi2) {
+                bit_sum = !carry;
+                // if (carry) {
+                //     bit_sum = 0;
+                //     carry = 1;
+                // } else {
+                //     bit_sum = 1;
+                //     carry = 0;
+                // }
+            } else {
+                bit_sum = carry;
+                carry = !!bit_bi1;
+                // if (bit_bi1) {
+                //     // bit_sum = carry;
+                //     // carry = 1;
+                //     // if (carry) {
+                //     //     bit_sum = 1;
+                //     //     carry = 1;
+                //     // } else {
+                //     //     bit_sum = 0;
+                //     //     carry = 1;
+                //     // }
+                // } else {
+                //     // bit_sum = carry;
+                //     // carry = 0;
+                //     // if (carry) {
+                //     //     bit_sum = 1;
+                //     //     carry = 0;
+                //     // } else {
+                //     //     bit_sum = 0;
+                //     //     carry = 0;
+                //     // }
+                // }
+            }
+
+            cur_sum = cur_sum | ((bit_sum) << j);
+        }
+        ll_bi_push(result, cur_sum);
+
+        cur_bi2_digit = cur_bi2_digit->prev_digit;
+        if (i < addend1->total_digits) {
+            cur_bi1_digit = cur_bi1_digit->prev_digit;
+        } else {
+            is_exceeded = 1;
+        }
+    }
+
+    return RC_OK;
+}
+
+// int bi_multiply(bi_t *result, ) {
+
+// }
+
+void bi_free(bi_t **bi_p) {
+    ll_bi_t *current = (*bi_p)->first_digit;
     ll_bi_t *previos = current;
     while (current != NULL) {
         previos = current;
         current = current->next_digit;
         free(previos);
     }
-    free(*bi);
-    *bi = NULL;
+    free(*bi_p);
+    *bi_p = NULL;
 }
 
 int ll_bi_push(bi_t *bi, digit_base_t digit) {
@@ -91,10 +156,23 @@ int ll_bi_push(bi_t *bi, digit_base_t digit) {
         bi->first_digit = ll_bi_new_digit;
     }
 
-    return 0;
+    return RC_OK;
 }
 
-int bi_from_str(bi_t *bi, char *str) {
+int bi_init(bi_t **bi_p) {
+    *bi_p = (bi_t *)malloc(sizeof(bi_t));
+    if (*bi_p == NULL) {
+        return RC_MEM_ERR;
+    }
+    (*bi_p)->first_digit = NULL;
+    (*bi_p)->last_digit = NULL;
+    (*bi_p)->total_digits = 0;
+    (*bi_p)->is_negative = 0;
+
+    return RC_OK;
+}
+
+int bi_init_from_str(bi_t **bi_p, char *str) {
     unsigned is_negative = *str == '-';
     if (is_negative)
         str++;
@@ -115,12 +193,15 @@ int bi_from_str(bi_t *bi, char *str) {
         }
     }
 
-    bi = (bi_t *)malloc(sizeof(bi_t));
-    if (bi == NULL) {
+    // *(bi.info) = (bi_info_t *)malloc(sizeof(bi_info_t));
+    // if (bi.info == NULL) {
+    //     return RC_MEM_ERR;
+    // }
+    if (bi_init(bi_p) == RC_MEM_ERR) {
         return RC_MEM_ERR;
     }
-    bi->is_negative = is_negative;
-    bi->first_digit = NULL;
+
+    (*bi_p)->is_negative = is_negative;
 
     size_t str_len = strlen(str);
     size_t str_len_offset = 0;
@@ -130,7 +211,7 @@ int bi_from_str(bi_t *bi, char *str) {
     }
 
     uint8_t is_zero = 1;
-    digit_base_t bits_count = 0;
+    unsigned bits_count = 0;
     digit_base_t bits = 0;
     do {
         is_zero = 1;
@@ -152,21 +233,20 @@ int bi_from_str(bi_t *bi, char *str) {
 
         if (bits_count == DIGIT_BASE_SIZE) {
             bits_count = 0;
-            if (ll_bi_push(bi, bits) == RC_MEM_ERR) {
-                bi_free(&bi);
+            if (ll_bi_push((*bi_p), bits) == RC_MEM_ERR) {
+                bi_free(bi_p);
                 return RC_MEM_ERR;
             }
             bits = 0;
         } else if (is_zero) {
-            if (ll_bi_push(bi, bits) == RC_MEM_ERR) {
-                bi_free(&bi);
+            if (ll_bi_push((*bi_p), bits) == RC_MEM_ERR) {
+                bi_free(bi_p);
                 return RC_MEM_ERR;
             }
         }
 
     } while (!is_zero);
 
-    printf("calculation done!, result: \n");
-    ll_bi_show(bi);
+    printf("converted \n");
     return 0;
 }
