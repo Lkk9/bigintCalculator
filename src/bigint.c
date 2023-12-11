@@ -13,7 +13,7 @@ void ll_bi_show(bi_t *bi) {
     }
 
     ll_bi_t *current = bi->first_digit;
-    while (current != NULL) {
+    while (0 && current != NULL) {
         for (digit_base_t i = 0; i < DIGIT_BASE_SIZE; i++) {
             if (!(current->digit & (((digit_base_t)1 << (DIGIT_BASE_SIZE - 1)) >> i))) {
                 printf("0");
@@ -24,6 +24,7 @@ void ll_bi_show(bi_t *bi) {
         current = current->next_digit;
     }
     printf("\n");
+    printf("(%llu) digits\n", bi->total_digits);
 }
 
 int bi_compare(bi_t *bi1, bi_t *bi2) {
@@ -50,7 +51,13 @@ void bi_swap(bi_t **bi1_p, bi_t **bi2_p) {
     *bi1_p = tmp;
 }
 
-int bi_add(bi_t *result, bi_t *addend1, bi_t *addend2) {
+int bi_add(bi_t **result, bi_t *addend1, bi_t *addend2) {
+
+    bi_t *sum;
+    if (bi_init(&sum) == RC_MEM_ERR) {
+        return RC_MEM_ERR;
+    }
+
     int compare = bi_compare(addend1, addend2);
 
     if (compare == 1) {
@@ -63,59 +70,35 @@ int bi_add(bi_t *result, bi_t *addend1, bi_t *addend2) {
     ll_bi_t *cur_bi1_digit = addend1->last_digit;
     ll_bi_t *cur_bi2_digit = addend2->last_digit;
     for (uint64_t i = 0; i < addend2->total_digits; i++) {
-
+        cur_sum = 0;
         for (unsigned j = 0; j < bits_to_count; j++) {
-            unsigned bit_sum = 0;
-            unsigned bit_bi1 = is_exceeded ? 0 : (cur_bi1_digit->digit & (1 << j));
-            unsigned bit_bi2 = (cur_bi2_digit->digit & (1 << j));
+            unsigned bit_next = (is_exceeded ? 0 : (cur_bi1_digit->digit >> j) & 1) + ((cur_bi2_digit->digit >> j) & 1) + carry;
+            // unsigned bit_sum = bit_next & 1;
+            carry = bit_next >> 1;
 
-            if (bit_bi1 ^ bit_bi2) {
-                bit_sum = !carry;
-                // if (carry) {
-                //     bit_sum = 0;
-                //     carry = 1;
-                // } else {
-                //     bit_sum = 1;
-                //     carry = 0;
-                // }
-            } else {
-                bit_sum = carry;
-                carry = !!bit_bi1;
-                // if (bit_bi1) {
-                //     // bit_sum = carry;
-                //     // carry = 1;
-                //     // if (carry) {
-                //     //     bit_sum = 1;
-                //     //     carry = 1;
-                //     // } else {
-                //     //     bit_sum = 0;
-                //     //     carry = 1;
-                //     // }
-                // } else {
-                //     // bit_sum = carry;
-                //     // carry = 0;
-                //     // if (carry) {
-                //     //     bit_sum = 1;
-                //     //     carry = 0;
-                //     // } else {
-                //     //     bit_sum = 0;
-                //     //     carry = 0;
-                //     // }
-                // }
-            }
+            // if (bit_bi1 ^ bit_bi2) {
+            //     bit_sum = !carry;
+            // } else {
+            //     bit_sum = carry;
+            //     carry = !!bit_bi1;
+            // }
 
-            cur_sum = cur_sum | ((bit_sum) << j);
+            cur_sum = cur_sum | ((bit_next & 1) << j);
         }
-        ll_bi_push(result, cur_sum);
+        ll_bi_push(sum, cur_sum);
 
         cur_bi2_digit = cur_bi2_digit->prev_digit;
-        if (i < addend1->total_digits) {
+        if (i + 1 < addend1->total_digits) {
             cur_bi1_digit = cur_bi1_digit->prev_digit;
         } else {
             is_exceeded = 1;
         }
     }
 
+    if (carry) {
+        ll_bi_push(sum, 1);
+    }
+    (*result) = sum;
     return RC_OK;
 }
 
@@ -170,6 +153,20 @@ int bi_init(bi_t **bi_p) {
     (*bi_p)->is_negative = 0;
 
     return RC_OK;
+}
+
+void bi_clear(bi_t **bi_p) {
+    (*bi_p)->last_digit = NULL;
+    (*bi_p)->total_digits = 0;
+    (*bi_p)->is_negative = 0;
+
+    ll_bi_t *current = (*bi_p)->first_digit;
+    ll_bi_t *previos = current;
+    while (current != NULL) {
+        previos = current;
+        current = current->next_digit;
+        free(previos);
+    }
 }
 
 int bi_init_from_str(bi_t **bi_p, char *str) {

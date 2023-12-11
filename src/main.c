@@ -24,17 +24,25 @@ int main(int argc, char **argv) {
     ll_mexp_t *stack = NULL;
     bi_t *a, *b, *c;
     // printf("ps: are %p %p %p\n", a.first_digit, a.last_digit, a.info);
-    clock_t begin = clock();
-    bi_init_from_str(&b, "11");
-    bi_init_from_str(&a, "10");
+    char *cnum = "7";
+    bi_init_from_str(&b, "1");
+    bi_init_from_str(&a, cnum);
     bi_init(&c);
 
     ll_bi_show(a);
-    ll_bi_show(b);
-    bi_add(c, a, b);
+    // ll_bi_show(b);
+
+    // power
+    clock_t begin = clock();
+    bi_t *i;
+    bi_init_from_str(&i, "0");
+    for (; bi_compare(i, a) == -1; bi_add(&i, i, b)) {
+        printf("alksd\n");
+    }
+    clock_t end = clock();
+
     ll_bi_show(c);
 
-    clock_t end = clock();
     printf("\n\ntime: %lf\n", (double)(end - begin) / CLOCKS_PER_SEC);
     if (ll_mexp_push(stack, 23) == NULL) {
         return RC_MEM_ERR;

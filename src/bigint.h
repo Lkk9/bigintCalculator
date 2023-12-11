@@ -41,10 +41,10 @@ int bi_init_from_str(bi_t **, char *);
  */
 int bi_compare(bi_t *a, bi_t *b);
 
-/*
+/* assignes sum b+c to variable a
  *
  */
-int bi_add(bi_t *, bi_t *, bi_t *);
+int bi_add(bi_t **a, bi_t *b, bi_t *c);
 
 /* prints all nodes (bin data of big int)
  *
