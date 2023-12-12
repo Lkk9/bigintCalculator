@@ -23,29 +23,23 @@ int main(int argc, char **argv) {
     }
     ll_mexp_t *stack = NULL;
     bi_t *a, *b, *c;
-    // printf("ps: are %p %p %p\n", a.first_digit, a.last_digit, a.info);
-    char *cnum = "7";
-    bi_init_from_str(&b, "1");
-    bi_init_from_str(&a, cnum);
+
+    bi_init_from_str(&a, "40");
+    bi_init_from_str(&b, "21");
     bi_init(&c);
 
     ll_bi_show(a);
-    // ll_bi_show(b);
-
-    // power
+    ll_bi_show(b);
     clock_t begin = clock();
-    bi_t *i;
-    bi_init_from_str(&i, "0");
-    for (; bi_compare(i, a) == -1; bi_add(&i, i, b)) {
-        printf("alksd\n");
-    }
+
+    bi_mul(&c, a, b);
     clock_t end = clock();
 
     ll_bi_show(c);
 
     printf("\n\ntime: %lf\n", (double)(end - begin) / CLOCKS_PER_SEC);
     if (ll_mexp_push(stack, 23) == NULL) {
-        return RC_MEM_ERR;
+        return RC_ERR;
     }
     bi_free(&a);
     bi_free(&b);

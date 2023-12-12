@@ -18,6 +18,7 @@ typedef struct bi_s {
     ll_bi_t *last_digit;
     uint64_t total_digits;
     uint8_t is_negative;
+    uint64_t ones;
 } bi_t;
 
 /*
@@ -34,6 +35,11 @@ int bi_init(bi_t **);
  */
 int bi_init_from_str(bi_t **, char *);
 
+/* does what it says
+ *
+ */
+int bi_init_from_bi(bi_t **bi_p, bi_t *bi_copy);
+
 /* returns:
  * -1 if a < b
  * 1 if a > b
@@ -46,19 +52,37 @@ int bi_compare(bi_t *a, bi_t *b);
  */
 int bi_add(bi_t **a, bi_t *b, bi_t *c);
 
+/* assignes product b*c to variable a
+ *
+ */
+int bi_mul(bi_t **a, bi_t *b, bi_t *c);
+
+/* perfoms left shift or right shift on variable b depending on direction value (0 - left, 1 - right)
+ *  stors result in variable a
+ */
+int bi_shift(bi_t **a, bi_t *b, unsigned direction);
+
 /* prints all nodes (bin data of big int)
  *
  */
 void ll_bi_show(bi_t *);
 
-/* adds one digit (base digit_base) to the number
- *
+/* adds one digit to the number (in front)
+ * destination (0 | 1)
+ * destinatino ? at the end : to the start;
  */
-int ll_bi_push(bi_t *, digit_base_t);
+int ll_bi_push(bi_t *, digit_base_t, unsigned destination);
 
 /* clears memory after using the number
  *
  */
 void bi_free(bi_t **);
+
+/* if bit DNE by index returns -1
+ * else return bit (1 | 0)
+ * index counts from the right
+ *
+ */
+int bi_get_bit(bi_t *bi, uint64_t index);
 
 #endif
