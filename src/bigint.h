@@ -3,7 +3,7 @@
 #ifndef BIGINT_H
 #define BIGINT_H
 
-typedef uint8_t digit_base_t;
+typedef uint32_t digit_base_t; // support 8, 16, 32 bit long int;
 
 #define DIGIT_BASE_SIZE (sizeof(digit_base_t) * 8)
 

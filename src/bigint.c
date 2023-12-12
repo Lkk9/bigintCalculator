@@ -118,25 +118,32 @@ int bi_shift(bi_t **result, bi_t *bi, unsigned dir) {
     }
 
     uint64_t bits_per_digit = sizeof(digit_base_t) * 8;
-    unsigned first_bit = (bi->first_digit->digit >> (bits_per_digit - 1)) & 1;
-    unsigned last_bit = bi->last_digit->digit & 1;
-
-    ll_bi_t *current = bi->first_digit;
+    // unsigned carry_bit = dir ? bi->last_digit->digit & 1 : (bi->first_digit->digit >> (bits_per_digit - 1)) & 1;
+    unsigned carry_bit = 0;
+    ll_bi_t *current = dir ? bi->first_digit : bi->last_digit;
     while (current != NULL) {
         digit_base_t cur_digit = current->digit;
+        unsigned cur_carry_bit = dir ? cur_digit & 1 : (cur_digit >> (bits_per_digit - 1)) & 1;
         if (dir) {
             cur_digit >>= 1;
+            cur_digit |= carry_bit << (bits_per_digit - 1);
+            ll_bi_push(bi_shifted, cur_digit, 1);
+            current = current->next_digit;
         } else {
             cur_digit <<= 1;
+            cur_digit |= carry_bit;
+            ll_bi_push(bi_shifted, cur_digit, 0);
+            current = current->prev_digit;
         }
-        ll_bi_push(bi_shifted, cur_digit, 1);
-        current = current->next_digit;
+        carry_bit = cur_carry_bit;
     }
 
-    if (last_bit && dir) {
-        ll_bi_push(bi_shifted, 1 << (bits_per_digit - 1), 1);
-    } else if (first_bit && dir == 0) {
-        ll_bi_push(bi_shifted, 1, 0);
+    if (carry_bit) {
+        if (dir) {
+            ll_bi_push(bi_shifted, 1 << (bits_per_digit - 1), 1);
+        } else {
+            ll_bi_push(bi_shifted, 1, 0);
+        }
     }
     bi_free(result);
     (*result) = bi_shifted;
@@ -144,26 +151,20 @@ int bi_shift(bi_t **result, bi_t *bi, unsigned dir) {
 }
 
 int bi_mul(bi_t **result, bi_t *bi1, bi_t *bi2) {
-    printf("SEGF\n");
     bi_t *bi_mul;
     if (bi_init(&bi_mul)) {
         return RC_ERR;
     }
     ll_bi_push(bi_mul, 0, 0);
-    printf("SEGF\n");
 
     if (bi1->ones > bi2->ones) {
         bi_swap(&bi1, &bi2);
     }
-    printf("SEGF\n");
 
     bi_t *bi2_offset;
     bi_init_from_bi(&bi2_offset, bi2);
-    printf("SEGF\n");
-
     for (uint64_t i = 0; i < bi1->total_digits * sizeof(digit_base_t) * 8; i++) {
         int cur_bit = bi_get_bit(bi1, i);
-        printf("SEGF AFTER i=%llu\n", i);
 
         if (cur_bit == -1) {
             fprintf(stderr, "Mul: index out of range\n");
@@ -171,21 +172,15 @@ int bi_mul(bi_t **result, bi_t *bi1, bi_t *bi2) {
         }
 
         if (cur_bit) {
-            printf("SEGF AFTER i=%llu\n", i);
-
             bi_add(&bi_mul, bi_mul, bi2_offset);
         }
         bi_shift(&bi2_offset, bi2_offset, 0);
     }
-    printf("SEGF\n");
 
     bi_free(&bi2_offset);
-    printf("SEGF\n");
 
     bi_free(result);
     (*result) = bi_mul;
-    printf("SEGF\n");
-
     return RC_OK;
 }
 
