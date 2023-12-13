@@ -283,6 +283,21 @@ int bi_init_from_bi(bi_t **bi_p, bi_t *bi_copy) {
     return RC_OK;
 }
 
+int bi_init_from_int(bi_t **bi_p, int num) {
+    if (bi_init(bi_p) == RC_ERR) {
+        return RC_ERR;
+    }
+    (*bi_p)->is_negative = num < 0;
+
+    uint8_t splits = sizeof(int) / sizeof(digit_base_t);
+    for (uint8_t i = 0; i < splits; i++) {
+        ll_bi_push(*bi_p, (digit_base_t)num, 0);
+        num >>= 8;
+    }
+
+    return RC_OK;
+}
+
 int bi_init_from_str(bi_t **bi_p, char *str) {
     unsigned is_negative = *str == '-';
     if (is_negative)
@@ -309,7 +324,30 @@ int bi_init_from_str(bi_t **bi_p, char *str) {
     }
 
     (*bi_p)->is_negative = is_negative;
+    /* TODO: optimize
+        // ll_bi_push(*bi_p, 0, 0);
 
+        // bi_t *bi_base;
+        // if (bi_init_from_int(&bi_base, 10) == RC_ERR) {
+        //     bi_free(bi_p);
+        //     return RC_ERR;
+        // }
+
+        // for (int i = 0; i < strlen(str); i++) {
+        //     bi_t *bi_cur_digit;
+        //     if (bi_init_from_int(&bi_cur_digit, str[i] - '0')) {
+        //         bi_free(bi_p);
+        //         bi_free(&bi_base);
+        //         return RC_ERR;
+        //     }
+
+        //     bi_mul(bi_p, *bi_p, bi_base);
+        //     bi_add(bi_p, *bi_p, bi_cur_digit);
+
+        //     bi_free(&bi_cur_digit);
+        // }
+        // bi_free(&bi_base);
+    */
     size_t str_len = strlen(str);
     size_t str_len_offset = 0;
     char quotient[str_len];
