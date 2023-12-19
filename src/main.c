@@ -41,7 +41,10 @@ int main(int argc, char **argv) {
         return RC_ERR;
     }
 
-    mexp_calculate(mexp, &result);
+    int ret = mexp_calculate(mexp, &result);
+    if (ret != RC_OK) {
+        return ret;
+    }
     bi_show(result);
     bi_print(result, 10);
 
