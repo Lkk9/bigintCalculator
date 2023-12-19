@@ -103,6 +103,6 @@ int bi_get_bit(bi_t *bi, uint64_t index);
 /* prints big int in base 10
  *
  */
-int bi_print(bi_t *bi, digit_base_t base);
+int bi_print(bi_t *bi);
 
 #endif

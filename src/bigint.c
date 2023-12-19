@@ -7,6 +7,12 @@
 #include <string.h>
 #include <time.h>
 
+void bi_swap(bi_t **bi1_p, bi_t **bi2_p) {
+    bi_t *tmp = *bi2_p;
+    *bi2_p = *bi1_p;
+    *bi1_p = tmp;
+}
+
 void bi_show(bi_t *bi) {
     if (bi->is_negative) {
         printf("-");
@@ -20,12 +26,10 @@ void bi_show(bi_t *bi) {
             } else
                 printf("1");
         }
-        printf(" ");
+        printf("");
         current = current->next_digit;
     }
     printf("\n");
-    printf("(%llu) digits\n", bi->total_digits);
-    printf("(%llu) ones\n", bi->ones);
 }
 
 int bi_compare(bi_t *bi1, bi_t *bi2, unsigned do_abs) {
@@ -50,139 +54,88 @@ int bi_compare(bi_t *bi1, bi_t *bi2, unsigned do_abs) {
     return 0;
 }
 
-int bi_print(bi_t *bi, digit_base_t base) {
-    bi_t *bi_in, *bi_in_next, *bi_zero, *bi_one, *bi_base, *bi_out;
-    if (bi_init_from_bi(&bi_in, bi) == RC_ERR) {
+static int bi_add_base10(bi_t **result_base10, bi_t *bi1_base10, bi_t *bi2_base10) {
+    bi_t *bi_sum_base10;
+    if (bi_init(&bi_sum_base10) == RC_ERR) {
         return RC_ERR;
     }
-    if (bi_init_from_int(&bi_zero, 0) == RC_ERR) {
-        bi_free(&bi_in);
-        return RC_ERR;
+
+    if (bi1_base10 != bi2_base10) {
+        if (bi_compare(bi1_base10, bi2_base10, 1) == -1)
+            bi_swap(&bi1_base10, &bi2_base10);
     }
-    if (bi_init_from_int(&bi_one, 1) == RC_ERR) {
-        bi_free(&bi_in);
-        bi_free(&bi_zero);
-        return RC_ERR;
-    }
-    if (bi_init_from_int(&bi_base, base) == RC_ERR) {
-        bi_free(&bi_in);
-        bi_free(&bi_zero);
-        bi_free(&bi_one);
-        return RC_ERR;
-    }
-    if (bi_init(&bi_out) == RC_ERR) {
-        bi_free(&bi_in);
-        bi_free(&bi_zero);
-        bi_free(&bi_base);
-        bi_free(&bi_one);
-        return RC_ERR;
-    }
-    if (bi_init(&bi_in_next) == RC_ERR) {
-        bi_free(&bi_in);
-        bi_free(&bi_zero);
-        bi_free(&bi_base);
-        bi_free(&bi_out);
-        bi_free(&bi_one);
-        return RC_ERR;
-    }
-    while (bi_compare(bi_in, bi_zero, 1) != 0) {
 
-        digit_base_t remainder = 0;
-        uint64_t total_bits = sizeof(digit_base_t) * 8 * bi_in->total_digits;
-        for (uint64_t i = 0; i < total_bits; i++) {
-
-            int cur_bit = bi_get_bit(bi_in, total_bits - 1 - i);
-            if (cur_bit == -1) {
-                bi_free(&bi_in);
-                bi_free(&bi_zero);
-                bi_free(&bi_base);
-                bi_free(&bi_out);
-                bi_free(&bi_in_next);
-                bi_free(&bi_one);
-                return RC_ERR;
-            }
-            remainder = 2 * remainder + cur_bit;
-
-            if (remainder >= base) {
-                if (bi_shift(&bi_in_next, bi_in_next, 0) == RC_ERR) {
-                    bi_free(&bi_in);
-                    bi_free(&bi_zero);
-                    bi_free(&bi_base);
-                    bi_free(&bi_out);
-                    bi_free(&bi_in_next);
-                    bi_free(&bi_one);
-                    return RC_ERR;
-                }
-
-                if (bi_add(&bi_in_next, bi_in_next, bi_one) == RC_ERR) {
-                    bi_free(&bi_in);
-                    bi_free(&bi_zero);
-                    bi_free(&bi_base);
-                    bi_free(&bi_out);
-                    bi_free(&bi_in_next);
-                    bi_free(&bi_one);
-                    return RC_ERR;
-                }
-
-                remainder -= base;
-            } else {
-                if (bi_shift(&bi_in_next, bi_in_next, 0) == RC_ERR) {
-                    bi_free(&bi_in);
-                    bi_free(&bi_zero);
-                    bi_free(&bi_base);
-                    bi_free(&bi_out);
-                    bi_free(&bi_in_next);
-                    bi_free(&bi_one);
-                    return RC_ERR;
-                }
-            }
-        }
-
-        if (bi_set_bi(&bi_in, bi_in_next) == RC_ERR) {
-            bi_free(&bi_in);
-            bi_free(&bi_zero);
-            bi_free(&bi_base);
-            bi_free(&bi_out);
-            bi_free(&bi_in_next);
-            bi_free(&bi_one);
+    digit_base_t cur_digit = 0;
+    digit_base_t carry = 0;
+    uint8_t is_exceeded = 0;
+    ll_bi_t *cur_bi1_base10_digit = bi1_base10->last_digit;
+    ll_bi_t *cur_bi2_base10_digit = bi2_base10->last_digit;
+    for (uint64_t i = 0; i < bi1_base10->total_digits; i++) {
+        uint64_t sum_base10 = cur_bi1_base10_digit->digit + (is_exceeded ? 0 : cur_bi2_base10_digit->digit) + carry;
+        carry = sum_base10 > 9 ? sum_base10 / 10 : 0;
+        cur_digit = sum_base10 % 10;
+        if (ll_bi_push(bi_sum_base10, cur_digit, 0) == RC_ERR) {
+            bi_free(&bi_sum_base10);
             return RC_ERR;
         }
-        bi_clear(&bi_in_next);
 
-        if (ll_bi_push(bi_out, remainder, 0) == RC_ERR) {
-            bi_free(&bi_in);
-            bi_free(&bi_zero);
-            bi_free(&bi_base);
-            bi_free(&bi_out);
-            bi_free(&bi_in_next);
-            bi_free(&bi_one);
-            return RC_ERR;
-        }
-    }
-
-    ll_bi_t *current = bi_out->first_digit;
-    while (current != NULL) {
-        if (sizeof(digit_base_t) == 8) {
-            printf("%d", current->digit);
+        cur_bi1_base10_digit = cur_bi1_base10_digit->prev_digit;
+        if (cur_bi2_base10_digit->prev_digit == NULL) {
+            is_exceeded = 1;
         } else {
-            printf("%i", current->digit);
+            cur_bi2_base10_digit = cur_bi2_base10_digit->prev_digit;
         }
-        current = current->next_digit;
     }
-    printf("\n");
-    bi_free(&bi_in);
-    bi_free(&bi_zero);
-    bi_free(&bi_base);
-    bi_free(&bi_out);
-    bi_free(&bi_in_next);
-    bi_free(&bi_one);
+
+    if (carry) {
+        if (ll_bi_push(bi_sum_base10, carry, 0) == RC_ERR) {
+            bi_free(&bi_sum_base10);
+            return RC_ERR;
+        }
+    }
+
+    bi_free(result_base10);
+    (*result_base10) = bi_sum_base10;
     return RC_OK;
 }
 
-void bi_swap(bi_t **bi1_p, bi_t **bi2_p) {
-    bi_t *tmp = *bi2_p;
-    *bi2_p = *bi1_p;
-    *bi1_p = tmp;
+int bi_print(bi_t *bi) {
+    bi_t *bi_power2, *bi_zero, *bi_out;
+    if (bi_init_from_int(&bi_power2, 1) == RC_ERR) {
+        return RC_ERR;
+    }
+    if (bi_init_from_int(&bi_zero, 0) == RC_ERR) {
+        bi_free(&bi_power2);
+        return RC_ERR;
+    }
+    if (bi_init_from_int(&bi_out, 0) == RC_ERR) {
+        bi_free(&bi_power2);
+        bi_free(&bi_zero);
+        return RC_ERR;
+    }
+
+    uint64_t total_bits = sizeof(digit_base_t) * 8 * bi->total_digits;
+    for (uint64_t i = 0; i < total_bits; i++) {
+        int cur_bit = bi_get_bit(bi, i);
+        if (cur_bit) {
+            bi_add_base10(&bi_out, bi_out, bi_power2);
+        }
+        bi_add_base10(&bi_power2, bi_power2, bi_power2); // TODO: add return rc_err check
+    }
+
+    if (bi->is_negative && bi_compare(bi, bi_zero, 0) != 0) {
+        printf("-");
+    }
+    ll_bi_t *current = bi_out->first_digit;
+    while (current != NULL) {
+        printf("%u", current->digit);
+        current = current->next_digit;
+    }
+    printf("\n");
+    bi_free(&bi_zero);
+    bi_free(&bi_power2);
+    bi_free(&bi_out);
+    return RC_OK;
 }
 
 int bi_add(bi_t **result, bi_t *bi1, bi_t *bi2) {
@@ -191,22 +144,14 @@ int bi_add(bi_t **result, bi_t *bi1, bi_t *bi2) {
     if (bi1->is_negative && bi2->is_negative) {
         is_negative = 1;
     } else if (bi1->is_negative) {
-        bi_t *bi1_neg;
-        if (bi_init_from_bi(&bi1_neg, bi1) == RC_ERR) {
-            return RC_ERR;
-        }
-        bi1_neg->is_negative = 0;
-        int ret = bi_sub(result, bi2, bi1_neg);
-        bi_free(&bi1_neg);
+        bi1->is_negative = 0;
+        int ret = bi_sub(result, bi2, bi1);
+        bi1->is_negative = 1;
         return ret;
     } else if (bi2->is_negative) {
-        bi_t *bi2_neg;
-        if (bi_init_from_bi(&bi2_neg, bi2) == RC_ERR) {
-            return RC_ERR;
-        }
-        bi2_neg->is_negative = 0;
-        int ret = bi_sub(result, bi1, bi2_neg);
-        bi_free(&bi2_neg);
+        bi2->is_negative = 0;
+        int ret = bi_sub(result, bi1, bi2);
+        bi2->is_negative = 1;
         return ret;
     }
 
@@ -235,7 +180,10 @@ int bi_add(bi_t **result, bi_t *bi1, bi_t *bi2) {
             carry = bit_next >> 1;
             cur_sum = cur_sum | ((bit_next & 1) << j);
         }
-        ll_bi_push(bi_sum, cur_sum, 0);
+        if (ll_bi_push(bi_sum, cur_sum, 0) == RC_ERR) {
+            bi_free(&bi_sum);
+            return RC_ERR;
+        }
 
         cur_bi2_digit = cur_bi2_digit->prev_digit;
         if (i + 1 < bi1->total_digits) {
@@ -246,7 +194,10 @@ int bi_add(bi_t **result, bi_t *bi1, bi_t *bi2) {
     }
 
     if (carry) {
-        ll_bi_push(bi_sum, 1, 0);
+        if (ll_bi_push(bi_sum, 1, 0) == RC_ERR) {
+            bi_free(&bi_sum);
+            return RC_ERR;
+        }
     }
     bi_free(result);
     (*result) = bi_sum;
@@ -255,22 +206,14 @@ int bi_add(bi_t **result, bi_t *bi1, bi_t *bi2) {
 
 int bi_sub(bi_t **result, bi_t *bi1, bi_t *bi2) {
     if (!bi1->is_negative && bi2->is_negative) {
-        bi_t *bi2_neg;
-        if (bi_init_from_bi(&bi2_neg, bi2) == RC_ERR) {
-            return RC_ERR;
-        }
-        bi2_neg->is_negative = 0;
-        int ret = bi_add(result, bi1, bi2_neg);
-        bi_free(&bi2_neg);
+        bi2->is_negative = 0;
+        int ret = bi_add(result, bi1, bi2);
+        bi2->is_negative = 1;
         return ret;
     } else if (bi1->is_negative && !bi2->is_negative) {
-        bi_t *bi1_neg;
-        if (bi_init_from_bi(&bi1_neg, bi1) == RC_ERR) {
-            return RC_ERR;
-        }
-        bi1_neg->is_negative = 0;
-        int ret = bi_add(result, bi2, bi1_neg);
-        bi_free(&bi1_neg);
+        bi1->is_negative = 0;
+        int ret = bi_add(result, bi2, bi1);
+        bi1->is_negative = 1;
         return ret;
     }
 
@@ -300,7 +243,10 @@ int bi_sub(bi_t **result, bi_t *bi1, bi_t *bi2) {
             borrow = bit_next >> 1;
             cur_sub = cur_sub | ((bit_next & 1) << j);
         }
-        ll_bi_push(bi_sub, cur_sub, 0);
+        if (ll_bi_push(bi_sub, cur_sub, 0) == RC_ERR) {
+            bi_free(&bi_sub);
+            return RC_ERR;
+        }
 
         cur_bi1_digit = cur_bi1_digit->prev_digit;
         if (i + 1 < bi2->total_digits) {
@@ -462,16 +408,13 @@ int ll_bi_push(bi_t *bi, digit_base_t digit, unsigned dest) {
 }
 
 int bi_copy_digits(bi_t **bi_p, bi_t *bi_copy) {
-    // printf("LESSGOOOOO: ----------------\n");
     ll_bi_t *current = bi_copy->last_digit;
     for (uint64_t i = 0; i < bi_copy->total_digits; i++) {
         if (current == NULL) {
-            fprintf(stderr, "Init: can not initialize big int from big int\n");
             return RC_ERR;
         }
         digit_base_t cur_digit = current->digit;
         ll_bi_push(*bi_p, cur_digit, 0);
-        // bi_show(*bi_p);
         current = current->prev_digit;
     }
     (*bi_p)->is_negative = bi_copy->is_negative;
@@ -525,8 +468,6 @@ int bi_init_from_bi(bi_t **bi_p, bi_t *bi_copy) {
     if (bi_copy_digits(bi_p, bi_copy) == RC_ERR) {
         return RC_ERR;
     }
-    // printf("HEREEREEEERR________)()()()\n");
-    // bi_show(*bi_p);
     return RC_OK;
 }
 
@@ -534,7 +475,7 @@ int bi_init_from_int(bi_t **bi_p, int num) {
     if (bi_init(bi_p) == RC_ERR) {
         return RC_ERR;
     }
-    (*bi_p)->is_negative = num < 0;
+    (*bi_p)->is_negative = num < 0; // TODO: take abs
 
     uint8_t splits = sizeof(int) / sizeof(digit_base_t);
     for (uint8_t i = 0; i < splits; i++) {
@@ -550,7 +491,6 @@ int bi_init_from_str(bi_t **bi_p, char *str) {
     if (is_negative)
         str++;
 
-    // remove leading zeros
     while (*str == '0' && *(str + 1) != '\0')
         str++;
 
@@ -558,10 +498,9 @@ int bi_init_from_str(bi_t **bi_p, char *str) {
         return 6;
     }
 
-    // error if weird symbols
     for (int i = strlen(str) - 1; i >= 0; i--) {
         if (str[i] < '0' || str[i] > '9') {
-            fprintf(stderr, "wrong, END: %d\n", str[i]); // TODO: make good
+            fprintf(stderr, "Input: unxpected character (%c)\n", str[i]); // TODO: make good
             return RC_INV_INPUT;
         }
     }
@@ -639,5 +578,5 @@ int bi_init_from_str(bi_t **bi_p, char *str) {
 
     } while (!is_zero);
 
-    return 0;
+    return RC_OK;
 }

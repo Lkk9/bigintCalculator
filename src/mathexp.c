@@ -41,7 +41,6 @@ int mexp_parse(mexp_t *mexp, char *str, notation_t input_type) {
     char *sep = " ";
     switch (input_type) {
     case INFIX:
-        // int parentheses = 0;
         fprintf(stderr, "Notation: unsupported notation type (infix)\n");
         return RC_NO_SUPPORT_INFIX;
         break;
@@ -60,7 +59,9 @@ int mexp_parse(mexp_t *mexp, char *str, notation_t input_type) {
                 fprintf(stderr, "Input: invalid token type at %zu\n", i);
                 return RC_INV_INPUT;
             case NUMBER:
-                bi_init_from_str(&num, token);
+                if (bi_init_from_str(&num, token) == RC_ERR) {
+                    return RC_ERR;
+                }
                 mexp_enqueue_number(mexp, num);
                 break;
             case PLUS:
@@ -253,13 +254,13 @@ int mexp_calculate(mexp_t *mexp, bi_t **result) {
             switch (current_item->op) {
             case ADD:
 
-                if (bi_add(&number, mexp_calc->first->number, mexp_calc->first->next->number) == RC_ERR) {
+                if (bi_add(&number, mexp_calc->first->next->number, mexp_calc->first->number) == RC_ERR) {
                     return RC_ERR;
                 }
 
                 break;
             case SUB:
-                if (bi_sub(&number, mexp_calc->first->number, mexp_calc->first->next->number) == RC_ERR) {
+                if (bi_sub(&number, mexp_calc->first->next->number, mexp_calc->first->number) == RC_ERR) {
                     return RC_ERR;
                 }
                 break;
@@ -295,7 +296,11 @@ int mexp_calculate(mexp_t *mexp, bi_t **result) {
     }
 
     if (mexp_get_size(mexp_calc) == 1) {
-        bi_init_from_bi(result, mexp_calc->first->number);
+        bi_set_bi(result, mexp_calc->first->number);
+    } else {
+        mexp_free(&mexp_calc);
+        fprintf(stderr, "Input: invalid sequence for that notaiton\n");
+        return RC_INV_INPUT;
     }
     mexp_free(&mexp_calc);
 

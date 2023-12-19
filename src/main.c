@@ -45,10 +45,9 @@ int main(int argc, char **argv) {
     if (ret != RC_OK) {
         return ret;
     }
-    bi_show(result);
-    bi_print(result, 10);
-
+    bi_print(result);
     bi_free(&result);
+    mexp_free(&mexp);
 
     return RC_OK;
 }

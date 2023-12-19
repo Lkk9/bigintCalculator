@@ -48,4 +48,6 @@ int mexp_pop(mexp_t *mexp);
  *
  */
 int mexp_init(mexp_t **mexp);
+
+void mexp_free(mexp_t **mexp);
 #endif
