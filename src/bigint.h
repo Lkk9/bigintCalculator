@@ -3,7 +3,7 @@
 #ifndef BIGINT_H
 #define BIGINT_H
 
-typedef uint32_t digit_base_t; // support 8, 16, 32 bit long int;
+typedef uint32_t digit_base_t; // supports unsigned 8, 16, 32 bit int;
 
 #define DIGIT_BASE_SIZE (sizeof(digit_base_t) * 8)
 
@@ -21,88 +21,69 @@ typedef struct bi_s {
     uint64_t ones;
 } bi_t;
 
-/*
- * initializes big int
+/**
+ * prints big int in base 10
  */
-int bi_init(bi_t **);
+int bi_print(bi_t *bi);
 
-/*
- * return values:
- * 0 if everything is ok
- * 4 if not [-0123456789]
- * 6 if only [-]
- * 5 if memory allocation failed
- */
-int bi_init_from_str(bi_t **, char *);
-
-int bi_init_from_int(bi_t **, int);
-
-/* does what it says
+/**
+ * bi1 < bi2 return -1
+ * bi1 == bi2 return 0
+ * bi1 > bi2 return 1
  *
+ * do_abs (1 | 0)
+ * compare absolute values if do_abs == 1
  */
-int bi_init_from_bi(bi_t **bi_p, bi_t *bi_copy);
+int bi_compare(bi_t *bi1, bi_t *bi2, unsigned do_abs);
 
-/* returns:
- * -1 if a < b
- * 1 if a > b
- * 0 if a == b
- * with do_abs set to 1 compares abs values of a and b
- * abs (0 | 1)
+/**
+ * result = bi1 + bi2
+ * mutates result
  */
-int bi_compare(bi_t *a, bi_t *b, unsigned do_abs);
+int bi_add(bi_t **result, bi_t *bi1, bi_t *bi2);
 
-/* assignes sum b+c to variable a
- *
- */
-int bi_add(bi_t **a, bi_t *b, bi_t *c);
-
-/* subtracts from bi1 bi2 and puts bi1-bi2 in result
+/**
+ * result = bi1 - bi2
+ * mutates result
  */
 int bi_sub(bi_t **result, bi_t *bi1, bi_t *bi2);
 
-/* assignes product b*c to variable a
- *
+/**
+ * result = bi1 * bi2
+ * mutates result
  */
-int bi_mul(bi_t **a, bi_t *b, bi_t *c);
+int bi_mul(bi_t **result, bi_t *bi1, bi_t *bi2);
 
-/* perfoms left shift or right shift on variable b depending on direction value (0 - left, 1 - right)
- *  stors result in variable a
+/**
+ * result = bi_copy
+ * mutates result
  */
-int bi_shift(bi_t **a, bi_t *b, unsigned direction);
+int bi_set_bi(bi_t **result, bi_t *bi_copy);
 
-/* prints all nodes (bin data of big int)
- *
+/**
+ * initializes big int, should be freed after use
  */
-void bi_show(bi_t *);
+int bi_init(bi_t **bi_p);
 
-/* adds one digit to the number (in front)
- * destination (0 | 1)
- * destinatino ? at the end : to the start;
+/**
+ * frees big int
  */
-int ll_bi_push(bi_t *, digit_base_t, unsigned destination);
+void bi_free(bi_t **bi_p);
 
-/* clears memory after using the number
- *
+/**
+ * initializes big int from existing big int
  */
-void bi_free(bi_t **);
+int bi_init_from_bi(bi_t **bi_p, bi_t *bi_copy);
 
-void bi_clear(bi_t **);
-
-/* just like assign operator but for big integers
- *
+/**
+ * initializes big int from signed integer
  */
-int bi_set_bi(bi_t **bi_p, bi_t *bi_copy);
+int bi_init_from_int(bi_t **bi_p, int num);
 
-/* if bit DNE by index returns -1
- * else return bit (1 | 0)
- * index counts from the right
- *
+/**
+ * initializes big int from string of [-0123456789]
+ * returns RC from returncode.h or 6 if only [-] passed
  */
-int bi_get_bit(bi_t *bi, uint64_t index);
-
-/* prints big int in base 10
- *
- */
-int bi_print(bi_t *bi);
+int bi_init_from_str(bi_t **bi_p, char *str);
 
 #endif

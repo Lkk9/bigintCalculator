@@ -2,9 +2,8 @@
 #include "notation.h"
 #include "returncode.h"
 #include <stdio.h>
-#include <string.h>
-
 #include <stdlib.h>
+#include <string.h>
 
 static token_t mexp_get_token_type(char *str) {
     size_t str_len = strlen(str);
@@ -36,6 +35,120 @@ static token_t mexp_get_token_type(char *str) {
     return OTHER;
 }
 
+static size_t mexp_get_size(mexp_t *mexp) {
+    size_t i = 0;
+    ll_mexp_t *current = mexp->first;
+    while (current != NULL) {
+        current = current->next;
+        i++;
+    }
+    return i;
+}
+
+static int mexp_enqueue_number(mexp_t *mexp, bi_t *number) {
+    ll_mexp_t *new_node = (ll_mexp_t *)malloc(sizeof(ll_mexp_t));
+    if (new_node == NULL) {
+        return RC_ERR;
+    }
+    new_node->type = NUM;
+    new_node->data.number = number;
+    new_node->next = NULL;
+    if (mexp->last == NULL) {
+        mexp->first = new_node;
+        mexp->last = new_node;
+    } else {
+        mexp->last->next = new_node;
+        mexp->last = new_node;
+    }
+    return RC_OK;
+}
+
+static int mexp_push_number(mexp_t *mexp, bi_t *number) {
+    ll_mexp_t *new_node = (ll_mexp_t *)malloc(sizeof(ll_mexp_t));
+    if (new_node == NULL) {
+        return RC_ERR;
+    }
+    new_node->type = NUM;
+    new_node->data.number = number;
+    if (mexp->last == NULL) {
+        mexp->first = new_node;
+        mexp->last = new_node;
+        new_node->next = NULL;
+    } else {
+        new_node->next = mexp->first;
+        mexp->first = new_node;
+    }
+    return RC_OK;
+}
+
+static int mexp_enqueue_operator(mexp_t *mexp, operator_t op) {
+    ll_mexp_t *new_node = (ll_mexp_t *)malloc(sizeof(ll_mexp_t));
+    if (new_node == NULL) {
+        return RC_ERR;
+    }
+    new_node->type = OPERATOR;
+    new_node->data.number = NULL;
+    new_node->data.op = op;
+    new_node->next = NULL;
+    if (mexp->last == NULL) {
+        mexp->first = new_node;
+        mexp->last = new_node;
+    } else {
+        mexp->last->next = new_node;
+        mexp->last = new_node;
+    }
+    return RC_OK;
+}
+
+// static int mexp_push_operator(mexp_t *mexp, operator_t op) {
+//     ll_mexp_t *new_node = (ll_mexp_t *)malloc(sizeof(ll_mexp_t));
+//     if (new_node == NULL) {
+//         return RC_ERR;
+//     }
+//     new_node->type = OPERATOR;
+//     new_node->data.number = NULL;
+//     new_node->data.op = op;
+//     if (mexp->last == NULL) {
+//         mexp->first = new_node;
+//         mexp->last = new_node;
+//         new_node->next = NULL;
+//     } else {
+//         new_node->next = mexp->first;
+//         mexp->first = new_node;
+//     }
+//     return RC_OK;
+// }
+
+static void mexp_pop(mexp_t *mexp) {
+
+    if (mexp->first == NULL) {
+        return;
+    }
+
+    if (mexp->first->type == NUM) {
+        bi_free(&(mexp->first->data.number));
+    }
+    ll_mexp_t *tmp = mexp->first;
+    mexp->first = mexp->first->next;
+    free(tmp);
+    if (mexp->first == NULL) {
+        mexp->last = NULL;
+    }
+}
+
+// static void mexp_show(mexp_t *mexp) {
+//     ll_mexp_t *current = mexp->first;
+//     while (current != NULL) {
+//         printf("NODE TYPE: %s\n", current->type == NUM ? "number" : "operation");
+//         if (current->type == NUM) {
+//             bi_show(current->number);
+//         } else {
+//             printf("\toperation: %d\n", current->op);
+//         }
+//         current = current->next;
+//     }
+// }
+
 int mexp_parse(mexp_t *mexp, char *str, notation_t input_type) {
     char *token;
     char *sep = " ";
@@ -46,9 +159,7 @@ int mexp_parse(mexp_t *mexp, char *str, notation_t input_type) {
         break;
     case REVPOL:
         token = strtok(str, sep);
-        size_t i = 0;
         while (token != NULL) {
-            i += strlen(token);
             token_t token_type = mexp_get_token_type(token);
             bi_t *num;
             operator_t op = NONE;
@@ -56,13 +167,15 @@ int mexp_parse(mexp_t *mexp, char *str, notation_t input_type) {
             case OTHER:
             case PARENTHESIS_CLOSE:
             case PARENTHESIS_OPEN:
-                fprintf(stderr, "Input: invalid token type at %zu\n", i);
-                return RC_INV_INPUT;
+                return rc_error(RC_INV_INPUT);
             case NUMBER:
                 if (bi_init_from_str(&num, token) == RC_ERR) {
                     return RC_ERR;
                 }
-                mexp_enqueue_number(mexp, num);
+                if (mexp_enqueue_number(mexp, num) == RC_ERR) {
+                    bi_free(&num);
+                    return RC_ERR;
+                }
                 break;
             case PLUS:
                 op = ADD;
@@ -83,7 +196,9 @@ int mexp_parse(mexp_t *mexp, char *str, notation_t input_type) {
             }
 
             if (op != NONE) {
-                mexp_enqueue_operator(mexp, op);
+                if (mexp_enqueue_operator(mexp, op) == RC_ERR) {
+                    return RC_ERR;
+                }
             }
             token = strtok(NULL, sep);
         }
@@ -93,98 +208,11 @@ int mexp_parse(mexp_t *mexp, char *str, notation_t input_type) {
     return RC_OK;
 }
 
-void mexp_show(mexp_t *mexp) {
-    ll_mexp_t *current = mexp->first;
-    while (current != NULL) {
-        printf("NODE TYPE: %s\n", current->type == NUM ? "number" : "operation");
-        if (current->type == NUM) {
-            bi_show(current->number);
-        } else {
-            printf("\toperation: %d\n", current->op);
-        }
-        current = current->next;
-    }
-}
-
-int mexp_enqueue_number(mexp_t *mexp, bi_t *number) {
-    ll_mexp_t *new_node = (ll_mexp_t *)malloc(sizeof(ll_mexp_t));
-    if (new_node == NULL) {
-        return RC_ERR;
-    }
-    new_node->type = NUM;
-    new_node->number = number;
-    new_node->next = NULL;
-    if (mexp->last == NULL) {
-        mexp->first = new_node;
-        mexp->last = new_node;
-    } else {
-        mexp->last->next = new_node;
-        mexp->last = new_node;
-    }
-    return RC_OK;
-}
-
-int mexp_push_number(mexp_t *mexp, bi_t *number) {
-    ll_mexp_t *new_node = (ll_mexp_t *)malloc(sizeof(ll_mexp_t));
-    if (new_node == NULL) {
-        return RC_ERR;
-    }
-    new_node->type = NUM;
-    new_node->number = number;
-    if (mexp->last == NULL) {
-        mexp->first = new_node;
-        mexp->last = new_node;
-        new_node->next = NULL;
-    } else {
-        new_node->next = mexp->first;
-        mexp->first = new_node;
-    }
-    return RC_OK;
-}
-
-int mexp_enqueue_operator(mexp_t *mexp, operator_t op) {
-    ll_mexp_t *new_node = (ll_mexp_t *)malloc(sizeof(ll_mexp_t));
-    if (new_node == NULL) {
-        return RC_ERR;
-    }
-    new_node->type = OPERATOR;
-    new_node->number = NULL;
-    new_node->op = op;
-    new_node->next = NULL;
-    if (mexp->last == NULL) {
-        mexp->first = new_node;
-        mexp->last = new_node;
-    } else {
-        mexp->last->next = new_node;
-        mexp->last = new_node;
-    }
-    return RC_OK;
-}
-
-int mexp_push_operator(mexp_t *mexp, operator_t op) {
-    ll_mexp_t *new_node = (ll_mexp_t *)malloc(sizeof(ll_mexp_t));
-    if (new_node == NULL) {
-        return RC_ERR;
-    }
-    new_node->type = OPERATOR;
-    new_node->number = NULL;
-    new_node->op = op;
-    if (mexp->last == NULL) {
-        mexp->first = new_node;
-        mexp->last = new_node;
-        new_node->next = NULL;
-    } else {
-        new_node->next = mexp->first;
-        mexp->first = new_node;
-    }
-    return RC_OK;
-}
-
 void mexp_free(mexp_t **mexp) {
     ll_mexp_t *current = (*mexp)->first;
     while (current != NULL) {
         if (current->type == NUM) {
-            bi_free(&(current->number));
+            bi_free(&(current->data.number));
         }
         ll_mexp_t *tmp = current;
         current = current->next;
@@ -192,24 +220,6 @@ void mexp_free(mexp_t **mexp) {
     }
     free(*mexp);
     *mexp = NULL;
-}
-
-int mexp_pop(mexp_t *mexp) {
-
-    if (mexp->first == NULL) {
-        return -1;
-    }
-
-    if (mexp->first->type == NUM) {
-        bi_free(&(mexp->first->number));
-    }
-    ll_mexp_t *tmp = mexp->first;
-    mexp->first = mexp->first->next;
-    free(tmp);
-    if (mexp->first == NULL) {
-        mexp->last = NULL;
-    }
-    return RC_OK;
 }
 
 int mexp_init(mexp_t **mexp) {
@@ -223,16 +233,6 @@ int mexp_init(mexp_t **mexp) {
     return RC_OK;
 }
 
-static size_t mexp_get_size(mexp_t *mexp) {
-    size_t i = 0;
-    ll_mexp_t *current = mexp->first;
-    while (current != NULL) {
-        current = current->next;
-        i++;
-    }
-    return i;
-}
-
 int mexp_calculate(mexp_t *mexp, bi_t **result) {
     mexp_t *mexp_calc;
     if (mexp_init(&mexp_calc) == RC_ERR) {
@@ -244,51 +244,62 @@ int mexp_calculate(mexp_t *mexp, bi_t **result) {
         if (current_item->type == OPERATOR) {
 
             if (mexp_calc->first == NULL || mexp_calc->first->next == NULL) {
-                fprintf(stderr, "Math Expression: incorrect format for the notation\n");
-                return RC_INV_INPUT;
+                mexp_free(&mexp_calc);
+                return rc_error(RC_INV_INPUT);
             }
             bi_t *number;
             if (bi_init(&number) == RC_ERR) {
+                mexp_free(&mexp_calc);
                 return RC_ERR;
             }
-            switch (current_item->op) {
+            switch (current_item->data.op) {
             case ADD:
 
-                if (bi_add(&number, mexp_calc->first->next->number, mexp_calc->first->number) == RC_ERR) {
+                if (bi_add(&number, mexp_calc->first->next->data.number, mexp_calc->first->data.number) == RC_ERR) {
+                    mexp_free(&mexp_calc);
+                    bi_free(&number);
                     return RC_ERR;
                 }
 
                 break;
             case SUB:
-                if (bi_sub(&number, mexp_calc->first->next->number, mexp_calc->first->number) == RC_ERR) {
+                if (bi_sub(&number, mexp_calc->first->next->data.number, mexp_calc->first->data.number) == RC_ERR) {
+                    mexp_free(&mexp_calc);
+                    bi_free(&number);
                     return RC_ERR;
                 }
                 break;
             case MUL:
-                if (bi_mul(&number, mexp_calc->first->number, mexp_calc->first->next->number) == RC_ERR) {
+                if (bi_mul(&number, mexp_calc->first->data.number, mexp_calc->first->next->data.number) == RC_ERR) {
+                    mexp_free(&mexp_calc);
+                    bi_free(&number);
                     return RC_ERR;
                 }
                 break;
             case DIV:
                 break;
             case NONE:
-                fprintf(stderr, "Operation: Met None operation\n");
+                fprintf(stderr, "Operation: Met unknown operation operation\n");
             }
 
             mexp_pop(mexp_calc);
             mexp_pop(mexp_calc);
             if (mexp_push_number(mexp_calc, number) == RC_ERR) {
+                mexp_free(&mexp_calc);
+                bi_free(&number);
                 return RC_ERR;
             }
 
         } else if (current_item->type == NUM) {
             bi_t *number;
 
-            if (bi_init_from_bi(&number, current_item->number) == RC_ERR) {
+            if (bi_init_from_bi(&number, current_item->data.number) == RC_ERR) {
+                mexp_free(&mexp_calc);
                 return RC_ERR;
             }
             if (mexp_push_number(mexp_calc, number) == RC_ERR) {
-                return RC_ERR;
+                mexp_free(&mexp_calc);
+                bi_free(&number);
             }
         }
 
@@ -296,11 +307,13 @@ int mexp_calculate(mexp_t *mexp, bi_t **result) {
     }
 
     if (mexp_get_size(mexp_calc) == 1) {
-        bi_set_bi(result, mexp_calc->first->number);
+        if (bi_set_bi(result, mexp_calc->first->data.number) == RC_ERR) {
+            mexp_free(&mexp_calc);
+            return RC_ERR;
+        }
     } else {
         mexp_free(&mexp_calc);
-        fprintf(stderr, "Input: invalid sequence for that notaiton\n");
-        return RC_INV_INPUT;
+        return rc_error(RC_INV_INPUT);
     }
     mexp_free(&mexp_calc);
 

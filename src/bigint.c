@@ -7,52 +7,83 @@
 #include <string.h>
 #include <time.h>
 
-void bi_swap(bi_t **bi1_p, bi_t **bi2_p) {
+/* -------- HELPERS -------- */
+
+static void bi_swap(bi_t **bi1_p, bi_t **bi2_p) {
     bi_t *tmp = *bi2_p;
     *bi2_p = *bi1_p;
     *bi1_p = tmp;
 }
 
-void bi_show(bi_t *bi) {
-    if (bi->is_negative) {
-        printf("-");
+static int bi_get_bit(bi_t *bi, uint64_t index) {
+    uint64_t bits_per_digit = sizeof(digit_base_t) * 8;
+    if (index > bi->total_digits * bits_per_digit) {
+        return -1;
     }
 
-    ll_bi_t *current = bi->first_digit;
-    while (current != NULL) {
-        for (digit_base_t i = 0; i < DIGIT_BASE_SIZE; i++) {
-            if (!(current->digit & (((digit_base_t)1 << (DIGIT_BASE_SIZE - 1)) >> i))) {
-                printf("0");
-            } else
-                printf("1");
-        }
-        printf("");
-        current = current->next_digit;
+    uint64_t digit_index = index / bits_per_digit;
+
+    ll_bi_t *current = bi->last_digit;
+    for (uint64_t i = 0; i < digit_index; i++) {
+        current = current->prev_digit;
     }
-    printf("\n");
+    return (current->digit >> (index - digit_index * bits_per_digit)) & 1;
 }
 
-int bi_compare(bi_t *bi1, bi_t *bi2, unsigned do_abs) {
-    if (bi1->is_negative ^ bi2->is_negative) {
-        return bi2->is_negative - bi1->is_negative;
+static int ll_bi_push(bi_t *bi, digit_base_t digit, unsigned dest) {
+    ll_bi_t *ll_bi_new_digit = (ll_bi_t *)malloc(sizeof(ll_bi_t));
+    if (ll_bi_new_digit == NULL) {
+        fprintf(stderr, "Memory error: can not allocate memory\n");
+        return RC_ERR;
     }
-    uint8_t flip = !do_abs && bi1->is_negative && bi2->is_negative;
-    if (bi1->total_digits != bi2->total_digits) {
-        return bi1->total_digits < bi2->total_digits ? (flip ? 1 : -1) : (flip ? -1 : 1);
+
+    ll_bi_new_digit->digit = digit;
+    bi->total_digits++;
+    uint64_t ones = 0;
+    for (uint64_t i = 0; i < sizeof(digit_base_t) * 8; i++) {
+        ones += (digit >> i) & 1;
     }
-    ll_bi_t *bi1_cur_digit = bi1->first_digit;
-    ll_bi_t *bi2_cur_digit = bi2->first_digit;
-    for (uint64_t i = 0; i < bi1->total_digits; i++) {
-        if (bi1_cur_digit->digit < bi2_cur_digit->digit) {
-            return flip ? 1 : -1;
-        } else if (bi1_cur_digit->digit > bi2_cur_digit->digit) {
-            return flip ? -1 : 1;
+    bi->ones += ones;
+
+    if (bi->first_digit == NULL) {
+        ll_bi_new_digit->next_digit = NULL;
+        ll_bi_new_digit->prev_digit = NULL;
+        bi->first_digit = ll_bi_new_digit;
+        bi->last_digit = ll_bi_new_digit;
+    } else {
+        if (dest) {
+            ll_bi_new_digit->next_digit = NULL;
+            bi->last_digit->next_digit = ll_bi_new_digit;
+            ll_bi_new_digit->prev_digit = bi->last_digit;
+            bi->last_digit = ll_bi_new_digit;
+        } else {
+            ll_bi_new_digit->next_digit = bi->first_digit;
+            bi->first_digit->prev_digit = ll_bi_new_digit;
+            ll_bi_new_digit->prev_digit = NULL;
+            bi->first_digit = ll_bi_new_digit;
         }
-        bi1_cur_digit = bi1_cur_digit->next_digit;
-        bi2_cur_digit = bi2_cur_digit->next_digit;
     }
-    return 0;
+
+    return RC_OK;
 }
+
+// static void bi_show(bi_t *bi) {
+//     if (bi->is_negative) {
+//         printf("-");
+//     }
+
+//     ll_bi_t *current = bi->first_digit;
+//     while (current != NULL) {
+//         for (digit_base_t i = 0; i < DIGIT_BASE_SIZE; i++) {
+//             if (!(current->digit & (((digit_base_t)1 << (DIGIT_BASE_SIZE - 1)) >> i))) {
+//                 printf("0");
+//             } else
+//                 printf("1");
+//         }
+//         current = current->next_digit;
+//     }
+//     printf("\n");
+// }
 
 static int bi_add_base10(bi_t **result_base10, bi_t *bi1_base10, bi_t *bi2_base10) {
     bi_t *bi_sum_base10;
@@ -99,6 +130,90 @@ static int bi_add_base10(bi_t **result_base10, bi_t *bi1_base10, bi_t *bi2_base1
     return RC_OK;
 }
 
+static int bi_shift(bi_t **result, bi_t *bi, unsigned dir) {
+
+    bi_t *bi_shifted;
+    if (bi_init(&bi_shifted) == RC_ERR) {
+        return RC_ERR;
+    }
+
+    uint64_t bits_per_digit = sizeof(digit_base_t) * 8;
+    unsigned carry_bit = 0;
+    ll_bi_t *current = dir ? bi->first_digit : bi->last_digit;
+    if (current == NULL) {
+        if (ll_bi_push(bi_shifted, 0, 0) == RC_ERR) {
+            bi_free(&bi_shifted);
+            return RC_ERR;
+        }
+    }
+    while (current != NULL) {
+        digit_base_t cur_digit = current->digit;
+        unsigned cur_carry_bit = dir ? cur_digit & 1 : (cur_digit >> (bits_per_digit - 1)) & 1;
+        if (dir) {
+            cur_digit >>= 1;
+            cur_digit |= carry_bit << (bits_per_digit - 1);
+            if (ll_bi_push(bi_shifted, cur_digit, 1) == RC_ERR) {
+                bi_free(&bi_shifted);
+                return RC_ERR;
+            }
+            current = current->next_digit;
+        } else {
+            cur_digit <<= 1;
+            cur_digit |= carry_bit;
+            if (ll_bi_push(bi_shifted, cur_digit, 0) == RC_ERR) {
+                bi_free(&bi_shifted);
+                return RC_ERR;
+            }
+            current = current->prev_digit;
+        }
+        carry_bit = cur_carry_bit;
+    }
+
+    if (carry_bit) {
+        if (dir) {
+            ll_bi_push(bi_shifted, 1 << (bits_per_digit - 1), 1);
+        } else {
+            ll_bi_push(bi_shifted, 1, 0);
+        }
+    }
+    bi_free(result);
+    (*result) = bi_shifted;
+    return RC_OK;
+}
+
+static void bi_reset(bi_t **bi_p) {
+    (*bi_p)->first_digit = NULL;
+    (*bi_p)->last_digit = NULL;
+    (*bi_p)->total_digits = 0;
+    (*bi_p)->is_negative = 0;
+    (*bi_p)->ones = 0;
+}
+
+static int bi_copy_digits(bi_t **bi_p, bi_t *bi_copy) {
+    ll_bi_t *current = bi_copy->last_digit;
+    for (uint64_t i = 0; i < bi_copy->total_digits; i++) {
+        if (current == NULL) {
+            return RC_ERR;
+        }
+        digit_base_t cur_digit = current->digit;
+        ll_bi_push(*bi_p, cur_digit, 0);
+        current = current->prev_digit;
+    }
+    (*bi_p)->is_negative = bi_copy->is_negative;
+    return RC_OK;
+}
+
+static void bi_clear(bi_t **bi_p) {
+    ll_bi_t *current = (*bi_p)->first_digit;
+    ll_bi_t *previos = current;
+    while (current != NULL) {
+        previos = current;
+        current = current->next_digit;
+        free(previos);
+    }
+    bi_reset(bi_p);
+}
+
 int bi_print(bi_t *bi) {
     bi_t *bi_power2, *bi_zero, *bi_out;
     if (bi_init_from_int(&bi_power2, 1) == RC_ERR) {
@@ -118,9 +233,19 @@ int bi_print(bi_t *bi) {
     for (uint64_t i = 0; i < total_bits; i++) {
         int cur_bit = bi_get_bit(bi, i);
         if (cur_bit) {
-            bi_add_base10(&bi_out, bi_out, bi_power2);
+            if (bi_add_base10(&bi_out, bi_out, bi_power2) == RC_ERR) {
+                bi_free(&bi_zero);
+                bi_free(&bi_power2);
+                bi_free(&bi_out);
+                return RC_ERR;
+            }
         }
-        bi_add_base10(&bi_power2, bi_power2, bi_power2); // TODO: add return rc_err check
+        if (bi_add_base10(&bi_power2, bi_power2, bi_power2) == RC_ERR) {
+            bi_free(&bi_zero);
+            bi_free(&bi_power2);
+            bi_free(&bi_out);
+            return RC_ERR;
+        }
     }
 
     if (bi->is_negative && bi_compare(bi, bi_zero, 0) != 0) {
@@ -137,6 +262,30 @@ int bi_print(bi_t *bi) {
     bi_free(&bi_out);
     return RC_OK;
 }
+
+int bi_compare(bi_t *bi1, bi_t *bi2, unsigned do_abs) {
+    if (bi1->is_negative ^ bi2->is_negative) {
+        return bi2->is_negative - bi1->is_negative;
+    }
+    uint8_t flip = !do_abs && bi1->is_negative && bi2->is_negative;
+    if (bi1->total_digits != bi2->total_digits) {
+        return bi1->total_digits < bi2->total_digits ? (flip ? 1 : -1) : (flip ? -1 : 1);
+    }
+    ll_bi_t *bi1_cur_digit = bi1->first_digit;
+    ll_bi_t *bi2_cur_digit = bi2->first_digit;
+    for (uint64_t i = 0; i < bi1->total_digits; i++) {
+        if (bi1_cur_digit->digit < bi2_cur_digit->digit) {
+            return flip ? 1 : -1;
+        } else if (bi1_cur_digit->digit > bi2_cur_digit->digit) {
+            return flip ? -1 : 1;
+        }
+        bi1_cur_digit = bi1_cur_digit->next_digit;
+        bi2_cur_digit = bi2_cur_digit->next_digit;
+    }
+    return 0;
+}
+
+/* -------- ARITHMETIC -------- */
 
 int bi_add(bi_t **result, bi_t *bi1, bi_t *bi2) {
     uint8_t is_negative = 0;
@@ -260,65 +409,6 @@ int bi_sub(bi_t **result, bi_t *bi1, bi_t *bi2) {
     return RC_OK;
 }
 
-int bi_get_bit(bi_t *bi, uint64_t index) {
-    uint64_t bits_per_digit = sizeof(digit_base_t) * 8;
-    if (index > bi->total_digits * bits_per_digit) {
-        return -1;
-    }
-
-    uint64_t digit_index = index / bits_per_digit;
-
-    ll_bi_t *current = bi->last_digit;
-    for (uint64_t i = 0; i < digit_index; i++) {
-        current = current->prev_digit;
-    }
-    return (current->digit >> (index - digit_index * bits_per_digit)) & 1;
-}
-
-int bi_shift(bi_t **result, bi_t *bi, unsigned dir) {
-
-    bi_t *bi_shifted;
-    if (bi_init(&bi_shifted) == RC_ERR) {
-        return RC_ERR;
-    }
-
-    uint64_t bits_per_digit = sizeof(digit_base_t) * 8;
-    unsigned carry_bit = 0;
-    ll_bi_t *current = dir ? bi->first_digit : bi->last_digit;
-    if (current == NULL) {
-        if (ll_bi_push(bi_shifted, 0, 0) == RC_ERR) {
-            return RC_ERR;
-        }
-    }
-    while (current != NULL) {
-        digit_base_t cur_digit = current->digit;
-        unsigned cur_carry_bit = dir ? cur_digit & 1 : (cur_digit >> (bits_per_digit - 1)) & 1;
-        if (dir) {
-            cur_digit >>= 1;
-            cur_digit |= carry_bit << (bits_per_digit - 1);
-            ll_bi_push(bi_shifted, cur_digit, 1); // TODO: CHEVK
-            current = current->next_digit;
-        } else {
-            cur_digit <<= 1;
-            cur_digit |= carry_bit;
-            ll_bi_push(bi_shifted, cur_digit, 0);
-            current = current->prev_digit;
-        }
-        carry_bit = cur_carry_bit;
-    }
-
-    if (carry_bit) {
-        if (dir) {
-            ll_bi_push(bi_shifted, 1 << (bits_per_digit - 1), 1);
-        } else {
-            ll_bi_push(bi_shifted, 1, 0);
-        }
-    }
-    bi_free(result);
-    (*result) = bi_shifted;
-    return RC_OK;
-}
-
 int bi_mul(bi_t **result, bi_t *bi1, bi_t *bi2) {
     bi_t *bi_mul;
     if (bi_init(&bi_mul)) {
@@ -358,68 +448,11 @@ int bi_mul(bi_t **result, bi_t *bi1, bi_t *bi2) {
     return RC_OK;
 }
 
-void bi_free(bi_t **bi_p) {
-    ll_bi_t *current = (*bi_p)->first_digit;
-    ll_bi_t *previos = current;
-    while (current != NULL) {
-        previos = current;
-        current = current->next_digit;
-        free(previos);
-    }
-    free(*bi_p);
-    *bi_p = NULL;
-}
+// int bi_div(bi_t **result, bi_t *bi1, bi_t *bi2) {
 
-int ll_bi_push(bi_t *bi, digit_base_t digit, unsigned dest) {
-    ll_bi_t *ll_bi_new_digit = (ll_bi_t *)malloc(sizeof(ll_bi_t));
-    if (ll_bi_new_digit == NULL) {
-        fprintf(stderr, "Memory error: can not allocate memory\n");
-        return RC_ERR;
-    }
+// }
 
-    ll_bi_new_digit->digit = digit;
-    bi->total_digits++;
-    uint64_t ones = 0;
-    for (uint64_t i = 0; i < sizeof(digit_base_t) * 8; i++) {
-        ones += (digit >> i) & 1;
-    }
-    bi->ones += ones;
-
-    if (bi->first_digit == NULL) {
-        ll_bi_new_digit->next_digit = NULL;
-        ll_bi_new_digit->prev_digit = NULL;
-        bi->first_digit = ll_bi_new_digit;
-        bi->last_digit = ll_bi_new_digit;
-    } else {
-        if (dest) {
-            ll_bi_new_digit->next_digit = NULL;
-            bi->last_digit->next_digit = ll_bi_new_digit;
-            ll_bi_new_digit->prev_digit = bi->last_digit;
-            bi->last_digit = ll_bi_new_digit;
-        } else {
-            ll_bi_new_digit->next_digit = bi->first_digit;
-            bi->first_digit->prev_digit = ll_bi_new_digit;
-            ll_bi_new_digit->prev_digit = NULL;
-            bi->first_digit = ll_bi_new_digit;
-        }
-    }
-
-    return RC_OK;
-}
-
-int bi_copy_digits(bi_t **bi_p, bi_t *bi_copy) {
-    ll_bi_t *current = bi_copy->last_digit;
-    for (uint64_t i = 0; i < bi_copy->total_digits; i++) {
-        if (current == NULL) {
-            return RC_ERR;
-        }
-        digit_base_t cur_digit = current->digit;
-        ll_bi_push(*bi_p, cur_digit, 0);
-        current = current->prev_digit;
-    }
-    (*bi_p)->is_negative = bi_copy->is_negative;
-    return RC_OK;
-}
+/* -------- SET TO -------- */
 
 int bi_set_bi(bi_t **bi_p, bi_t *bi_copy) {
     bi_clear(bi_p);
@@ -427,14 +460,6 @@ int bi_set_bi(bi_t **bi_p, bi_t *bi_copy) {
         return RC_ERR;
     }
     return RC_OK;
-}
-
-static void bi_reset(bi_t **bi_p) {
-    (*bi_p)->first_digit = NULL;
-    (*bi_p)->last_digit = NULL;
-    (*bi_p)->total_digits = 0;
-    (*bi_p)->is_negative = 0;
-    (*bi_p)->ones = 0;
 }
 
 int bi_init(bi_t **bi_p) {
@@ -449,7 +474,7 @@ int bi_init(bi_t **bi_p) {
     return RC_OK;
 }
 
-void bi_clear(bi_t **bi_p) {
+void bi_free(bi_t **bi_p) {
     ll_bi_t *current = (*bi_p)->first_digit;
     ll_bi_t *previos = current;
     while (current != NULL) {
@@ -457,8 +482,11 @@ void bi_clear(bi_t **bi_p) {
         current = current->next_digit;
         free(previos);
     }
-    bi_reset(bi_p);
+    free(*bi_p);
+    *bi_p = NULL;
 }
+
+/* -------- INIT -------- */
 
 int bi_init_from_bi(bi_t **bi_p, bi_t *bi_copy) {
     if (bi_init(bi_p) == RC_ERR) {
@@ -475,7 +503,10 @@ int bi_init_from_int(bi_t **bi_p, int num) {
     if (bi_init(bi_p) == RC_ERR) {
         return RC_ERR;
     }
-    (*bi_p)->is_negative = num < 0; // TODO: take abs
+    if (num < 0) {
+        (*bi_p)->is_negative = 1;
+        num *= -1;
+    }
 
     uint8_t splits = sizeof(int) / sizeof(digit_base_t);
     for (uint8_t i = 0; i < splits; i++) {

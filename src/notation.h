@@ -3,4 +3,6 @@
 
 typedef enum { REVPOL, INFIX } notation_t;
 
+int notation_get(notation_t *notation, char *str);
+
 #endif
